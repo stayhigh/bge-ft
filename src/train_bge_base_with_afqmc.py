@@ -49,9 +49,10 @@ def main():
 
     # 设置训练参数
     training_args = TrainingArguments(
-        output_dir="./finetuned_models/finetuned_models_with_afqmc",
+        output_dir="./finetuned_models/finetuned_models_with_afqmc_" + timestamp,
         eval_strategy="epoch",
         save_strategy="epoch",
+        logging_strategy="epoch",
         per_device_train_batch_size=32,
         per_device_eval_batch_size=32,
         gradient_accumulation_steps=4,
