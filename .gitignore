@@ -1,0 +1,33 @@
+# Model and cache directories
+finetuned_models/
+others/
+cached_data/
+
+# Other unimportant directories
+/others/
+
+# Log files
+*.log
+*.tmp
+*.cache
+wandb/
+
+# Python cache
+__pycache__/
+*.pyc
+.env
+.venv/
+
+# Jupyter notebook outputs
+.ipynb_checkpoints/
+
+# Machine learning data
+/data/
+
+# Temporary files
+*.tmp
+*.swp
+*~
+
+# Roo files
+.roo
