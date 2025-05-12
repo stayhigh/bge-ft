@@ -4,6 +4,7 @@ import torch.distributed as dist
 import os
 import numpy as np
 from datetime import datetime
+import wandb
 
 
 # 设置 CUDA 架构列表
@@ -13,6 +14,15 @@ def print_dataset(dataset):
     print(f"The number of training samples: {len(dataset['train'])}")
     print(f"The number of validation samples: {len(dataset['validation'])}")
     print(f"The number of test samples: {len(dataset['test'])}")
+
+def load_data_from_json():
+    dataset_name = "clue/afqmc"
+    dataset = load_dataset("json", data_files={"train": "./data/afqmc/afqmc_train.json", "validation": "./data/afqmc/afqmc_validation.json"})
+    cache_dir = "./cached_data"
+    os.makedirs(cache_dir, exist_ok=True)
+    print(f"downloading {dataset_name}...")
+    dataset = load_dataset(dataset_name, cache_dir=cache_dir)
+    return dataset
 
 def main():
     # 加载预训练的 bge-base 模型和分词器
@@ -29,12 +39,7 @@ def main():
     dataset =  load_dataset(data_path, data_name, cache_dir=cache_dir)
     print_dataset(dataset)
 
-    # dataset_name = "clue/afqmc"
-    # dataset = load_dataset("json", data_files={"train": "./data/afqmc/afqmc_train.json", "validation": "./data/afqmc/afqmc_validation.json"})
-    # cache_dir = "./cached_data"
-    # os.makedirs(cache_dir, exist_ok=True)
-    # print(f"downloading {dataset_name}...")
-    # dataset = load_dataset(dataset_name, cache_dir=cache_dir)
+
 
     # 定义数据预处理函数
     def preprocess_function(examples):
@@ -45,7 +50,24 @@ def main():
 
     # 定义数据整理器
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-    timestamp =  str(datetime.now().strftime("%Y%m%d_%H%M%S"))
+    # Replace slashes in model and dataset names for consistent logging
+    safe_model_name = model_name.replace('/', '_')
+    safe_dataset_name = dataset_name.replace('/', '_')
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_name = f"{safe_model_name}-{safe_dataset_name}-train-{timestamp}"
+    
+    # wandb 初始化
+    wandb.init(
+        project='bge-ft-afqm',
+        name="finetune bge model with afqmc dataset",
+        id = run_name,
+        config={
+            "model_name": model_name,
+            "dataset_name": dataset_name, 
+            "timestamp": timestamp
+        }
+    )
 
     # 设置训练参数
     training_args = TrainingArguments(
@@ -64,15 +86,16 @@ def main():
         bf16=True,  # 启用混合精度训练
         ddp_find_unused_parameters=False,
         learning_rate=2e-5,
-        run_name=f"{model_name}-{dataset_name}-train-" + timestamp,
+        run_name=run_name,
         report_to="all" # 使用默認選項，all選項可以觸發wandb
     )
+    wandb.run.tags = ["finetuning", "afqmc", "bert-base"]  # 添加实验标签
 
     def compute_metrics(eval_pred):
         predictions, labels = eval_pred
         predictions = np.argmax(predictions, axis=1)
         accuracy = (predictions == labels).mean()
-        print(f"Accuracy in this epoch: {accuracy}")  # 打印每个回合的准确率
+        wandb.log({"accuracy": accuracy, "epoch": eval_pred[0].shape[0]})  # 添加 epoch 参数
         return {"accuracy": accuracy}
     
     early_stopping_callback = EarlyStoppingCallback(
@@ -97,10 +120,11 @@ def main():
         trainer.train()
     finally:
         cleanup()
+        wandb.finish()  # 确保wandb清理
 
 def cleanup():
     if dist.is_initialized():
         dist.destroy_process_group()
 
 if __name__ == "__main__":
-    main()    
+    main()
